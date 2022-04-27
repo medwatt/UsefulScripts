@@ -1,6 +1,6 @@
 # About
 
-The default behavior of i3 is to remember a single workspaces across all
+The default behavior of i3 is to remember a single workspace across all
 monitors. As soon as you shift focus to a workspace on another monitor, i3
 forgets the last visited workspace on the previous monitor. This script
 "attempts" to fix this behavior by remembering the last visited workspace on
