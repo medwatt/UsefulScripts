@@ -21,7 +21,6 @@ def latex_document(latex):
 
 def main(latex):
     m = tempfile.NamedTemporaryFile(mode='w+', delete=False)
-    print(latex_document(latex))
     m.write(latex_document(latex))
     m.close()
 
@@ -33,7 +32,6 @@ def main(latex):
         stderr=subprocess.DEVNULL
     )
 
-    print(m.name)
     subprocess.run(
         ['pdf2svg', f'{m.name}.pdf', f'{m.name}.svg'],
         cwd=working_directory,
