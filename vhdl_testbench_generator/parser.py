@@ -60,7 +60,7 @@ class VHDL_Parser:
         self.clock_name = self.get_name_from_block(regex, self.port_block, None)
 
     def get_reset_name(self):
-        regex = r"\b(reset|rst|rstn)[\s\w,]*:\s*in.*?;"
+        regex = r"\b(reset|rst|rstn|nrst)[\s\w,]*:\s*in.*?;"
         self.reset_name = self.get_name_from_block(regex, self.port_block, None)
 
     def get_name_from_block(self, regex, block, default_name):

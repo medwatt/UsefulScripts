@@ -5,6 +5,12 @@ class VHDL_TB:
         self.parser = VHDL_Parser(vhdl_string).parse_vhdl()
         self.clock_period = "5 ns"
 
+    def return_signals(self):
+        self.signal_def_block, _ = self.build_block_from_table(
+                self.parser.signals, "signals", "port", "signal"
+                )
+        return "\n".join(self.signal_def_block)
+
     def __call__(self):
         self.build_library_block()
         self.build_entity_block()
@@ -26,23 +32,23 @@ class VHDL_TB:
         self.library_block = [
                 "library ieee;",
                 "use ieee.std_logic_1164.all;",
-                "\n"]
+                "\n"
+                ]
 
     def build_entity_block(self):
         self.entity_block = [
                 f"entity {self.parser.entity_name}_tb is",
                 f"end {self.parser.entity_name}_tb;",
-                "\n",
+                "\n"
                 ]
 
     def build_uut_block(self):
-        self.uut_signal_block[-1] = self.uut_signal_block[-1] + ";"
 
         compose_block = [
                 f"\tuut: entity work.{self.parser.entity_name}({self.parser.architecture_name})",
-                self.uut_generic_block,
-                self.uut_signal_block,
-                "",
+                self.generic_uut_block,
+                self.signal_uut_block,
+                ""
                 ]
 
         self.uut_block = []
@@ -53,11 +59,11 @@ class VHDL_TB:
                 self.uut_block.append(block)
 
     def build_architecture_block(self):
-        self.arch_generic_block, self.uut_generic_block = self.build_block_from_table(
-                self.parser.generics, "Generics", "generic", "constant"
+        self.generic_def_block, self.generic_uut_block = self.build_block_from_table(
+                self.parser.generics, "component generics", "generic", "constant"
                 )
-        self.arch_signal_block, self.uut_signal_block = self.build_block_from_table(
-                self.parser.signals, "Signals", "port", "signal"
+        self.signal_def_block, self.signal_uut_block = self.build_block_from_table(
+                self.parser.signals, "component ports", "port", "signal"
                 )
         self.build_uut_block()
         self.build_clock_block()
@@ -66,14 +72,17 @@ class VHDL_TB:
 
         compose_block = [
                 f"architecture testbench of {self.parser.entity_name}_tb is",
-                self.arch_generic_block,
-                self.arch_signal_block,
+                self.generic_def_block,
+                self.signal_def_block,
+                self.clock_def_block,
+                "",
                 "begin",
+                "",
                 self.uut_block,
                 self.clock_block,
                 self.reset_block,
                 self.stimulus_block,
-                "end testbench",
+                "end testbench"
                 ]
 
         self.architecture_block = []
@@ -88,9 +97,14 @@ class VHDL_TB:
         clock_name = self.parser.clock_name
         if clock_name:
             self.clock_block = [
-                    "\t-- Clock generation",
+                    "\t-- clock generation",
                     f"\t{clock_name} <= not {clock_name} after {self.clock_period};",
-                    "",
+                    ""
+                    ]
+
+            self.clock_def_block = [
+                    "\n\t-- clock",
+                    f"\tsignal {clock_name}: std_logic := '1';",
                     ]
 
     def build_reset_block(self):
@@ -99,23 +113,26 @@ class VHDL_TB:
         if reset_name:
             if (reset_name == "reset") or (reset_name == "rst"):
                 self.reset_block = [
-                        "\t-- Reset generation",
+                        "\t-- reset generation",
                         f"\t{reset_name} <= '1', '0' after {self.clock_period};",
-                        "",
+                        ""
                         ]
             else:
                 self.reset_block = [
-                        "\t-- Reset generation",
-                        f"\t{reset_name} <= '0', '1' after {self.clock_period};" "",
+                        "\t-- reset generation",
+                        f"\t{reset_name} <= '0', '1' after {self.clock_period};",
+                        ""
                         ]
 
     def build_stimulus_block(self):
         self.stimulus_block = [
-                "\tstimuli: process",
+                "\t-- waveform generation",
+                "\tWaveGen_Proc: process",
                 "\tbegin",
-                "",
+                "\t-- insert signal assignments here"
+                "\n",
                 "\tend process;",
-                "",
+                ""
                 ]
 
     def build_block_from_table(
@@ -125,19 +142,21 @@ class VHDL_TB:
         uut_block = None
         if table:
             arch_block = [None] * (len(table) + 1)
-            arch_block[0] = f"\t-- {comment_block_title}"
+            arch_block[0] = f"\n\t-- {comment_block_title}"
 
             uut_block = [None] * (len(table) + 2)
             uut_block[0] = f"\t{map_block_title} map ("
             uut_block[-1] = "\t)"
 
             for idx, (identifier_name, identifier_type) in enumerate(table.items()):
-                arch_block[
-                        idx + 1
-                        ] = f"\t{obj_name} {identifier_name}: {identifier_type};"
+                arch_block[idx + 1] = f"\t{obj_name} {identifier_name}: {identifier_type};"
                 uut_block[idx + 1] = f"\t\t{identifier_name} => {identifier_name},"
 
             # remove the comma in the last item of the map block
             uut_block[-2] = uut_block[-2][:-1]
+
+            # add a semicolon to the uut signal block to close it
+            if map_block_title == "port":
+                uut_block[-1] = uut_block[-1] + ";"
 
         return arch_block, uut_block
