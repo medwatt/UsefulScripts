@@ -127,7 +127,7 @@ class VHDL_TB:
 
             uut_block = [None] * (len(table) + 2)
             uut_block[0] = f"\t{map_block_title} map ("
-            uut_block[-1] = "\t)"
+            uut_block[-1] = "\t);"
 
             for idx, (identifier_name, identifier_type) in enumerate(table.items()):
                 arch_block[
