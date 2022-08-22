@@ -3,15 +3,22 @@
 from i3ipc import Connection, Event
 
 # this is the command that must be used from i3 to make use of this script
-# e.g. bindsym Mod4+Tab nop mode_back_and_forth
-CMD_BACK_AND_FORTH = "nop mode_back_and_forth"
+# e.g. bindsym Mod4+Tab nop mode_workspace_back_and_forth
+CMD_WORKSPACE_BACK_AND_FORTH = "nop mode_workspace_back_and_forth"
+CMD_WINDOW_BACK_AND_FORTH = "nop mode_window_back_and_forth"
 
 # this dictionary saves the previous and current workspaces of all monitors
 # VISITED_WORKSPACES = { monitor_name : [previous_workspace, current_workspace] }
 VISTED_WORKSPACES = {}
 
+# this dictionary saves the last visited window per workspace
+# VISITED_WINDOWS = { workspace_name : window_id }
+VISTED_WINDOWS = {}
+
 # this saves the name of the focused monitor
 FOCUSED_MONITOR = ""
+FOCUSED_WINDOW = ""
+WORKSPACE_CHANGE = False
 
 
 def on_workspace(self, event):
@@ -20,6 +27,7 @@ def on_workspace(self, event):
     """
     global VISTED_WORKSPACES
     global FOCUSED_MONITOR
+    global WORKSPACE_CHANGE
 
     # update the last workspace only when we are on the same monitor
     if FOCUSED_MONITOR == event.current.ipc_data['output']:
@@ -32,6 +40,9 @@ def on_workspace(self, event):
         if event.current.name != VISTED_WORKSPACES[FOCUSED_MONITOR][1]:
             VISTED_WORKSPACES[FOCUSED_MONITOR] =[VISTED_WORKSPACES[FOCUSED_MONITOR][1] , event.current.name]
 
+    # let everyone know that that the workspace has changed
+    WORKSPACE_CHANGE = True
+
 
 def on_binding(self, event):
     """
@@ -41,9 +52,32 @@ def on_binding(self, event):
     command = event.binding.command
 
     # switch workspaces if the correct command was issued
-    if command.startswith(CMD_BACK_AND_FORTH):
+    if command == CMD_WORKSPACE_BACK_AND_FORTH:
         current_output = i3.get_tree().find_focused().ipc_data['output']
         i3.command(f"workspace {VISTED_WORKSPACES[current_output][0]}")
+
+    elif command == CMD_WINDOW_BACK_AND_FORTH:
+        current_workspace = i3.get_tree().find_focused().workspace().name
+        i3.command(f"[con_id={VISTED_WINDOWS[current_workspace]}] focus")
+
+def on_window(self, event):
+    """
+    This event is triggered every time there's a windows change
+    """
+    global FOCUSED_WINDOW
+    global VISTED_WINDOWS
+    global WORKSPACE_CHANGE
+
+    current_window = event.ipc_data["container"]["id"];
+    current_workspace = i3.get_tree().find_focused().workspace().name
+
+    # save the last focused window only when we're in the same workspace
+    if not WORKSPACE_CHANGE:
+        VISTED_WINDOWS[current_workspace] = FOCUSED_WINDOW
+    FOCUSED_WINDOW = current_window
+
+    # since we're in the same workspace, set this to False
+    WORKSPACE_CHANGE = False
 
 
 def init():
@@ -71,5 +105,7 @@ if __name__ == "__main__":
     # subscribe to events
     i3.on(Event.BINDING, on_binding)
     i3.on(Event.WORKSPACE_FOCUS, on_workspace)
+    i3.on(Event.WINDOW_NEW, on_window)
+    i3.on(Event.WINDOW_FOCUS, on_window)
 
     i3.main()
