@@ -11,19 +11,21 @@ CMD_WINDOW_BACK_AND_FORTH = "nop mode_window_back_and_forth"
 # VISITED_WORKSPACES = { monitor_name : [previous_workspace, current_workspace] }
 VISTED_WORKSPACES = {}
 
-# this dictionary saves the last visited window per workspace
+# this dictionary saves the last visited non-floating window per workspace
 # VISITED_WINDOWS = { workspace_name : window_id }
 VISTED_WINDOWS = {}
 
 # this saves the name of the focused monitor
 FOCUSED_MONITOR = ""
 FOCUSED_WINDOW = ""
+
+# this variable is set whenever there's a workspace change
 WORKSPACE_CHANGE = False
 
 
 def on_workspace(self, event):
     """
-    This event is triggered every time there's a workspace change
+    This event is triggered every time there's a workspace change.
     """
     global VISTED_WORKSPACES
     global FOCUSED_MONITOR
@@ -44,9 +46,35 @@ def on_workspace(self, event):
     WORKSPACE_CHANGE = True
 
 
+def on_window(self, event):
+    """
+    This event is triggered every time there's a change in window focus.
+    """
+    global FOCUSED_WINDOW
+    global VISTED_WINDOWS
+    global WORKSPACE_CHANGE
+
+    current_window = event.ipc_data["container"]["id"];                 # get the id of the current window
+    floating_status = event.ipc_data["container"]["floating"]           # check whether the current window is floating
+    current_workspace = i3.get_tree().find_focused().workspace().name   # get the name of the current workspace
+
+    # we should not update when we switch workspaces, otherwise executing the command
+    # will switch workspaces as the last two windows are from different workspaces
+    if not WORKSPACE_CHANGE:
+        # we also ignore floating windows since floating windows tend to be dialog boxes, popups, etc.
+        if floating_status != "user_on" and current_window != FOCUSED_WINDOW:
+            VISTED_WINDOWS[current_workspace] = FOCUSED_WINDOW
+            FOCUSED_WINDOW = current_window
+    else:
+        VISTED_WINDOWS[current_workspace] = current_window
+        FOCUSED_WINDOW = current_window
+
+    # since we're in the same workspace, set this to False
+    WORKSPACE_CHANGE = False
+
 def on_binding(self, event):
     """
-    This event is triggered every time there's a key pressed from within i3
+    This event is triggered every time a key is pressed from within i3.
     """
     # get the command called from within i3
     command = event.binding.command
@@ -60,37 +88,20 @@ def on_binding(self, event):
         current_workspace = i3.get_tree().find_focused().workspace().name
         i3.command(f"[con_id={VISTED_WINDOWS[current_workspace]}] focus")
 
-def on_window(self, event):
-    """
-    This event is triggered every time there's a windows change
-    """
-    global FOCUSED_WINDOW
-    global VISTED_WINDOWS
-    global WORKSPACE_CHANGE
-
-    current_window = event.ipc_data["container"]["id"];
-    current_workspace = i3.get_tree().find_focused().workspace().name
-
-    # save the last focused window only when we're in the same workspace
-    if not WORKSPACE_CHANGE:
-        VISTED_WINDOWS[current_workspace] = FOCUSED_WINDOW
-    FOCUSED_WINDOW = current_window
-
-    # since we're in the same workspace, set this to False
-    WORKSPACE_CHANGE = False
-
 
 def init():
+    global FOCUSED_WINDOW
     global FOCUSED_MONITOR
     global VISTED_WORKSPACES
 
-    # get the current focused workspace and focused monitor
+    # get the current focused window, workspace, and monitor
     current_focus = i3.get_tree().find_focused()
     current_workspace = current_focus.workspace().name
     FOCUSED_MONITOR = current_focus.ipc_data['output']
+    FOCUSED_WINDOW = current_focus.ipc_data["id"]
 
     # set the former and current workspaces of all monitors to be the current ones
-    # because we don't know anything yet
+    # because we haven't visited any workspaces yet
     for monitor in i3.get_outputs():
         VISTED_WORKSPACES[monitor.name] = [current_workspace, current_workspace]
 
