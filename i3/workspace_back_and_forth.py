@@ -66,8 +66,10 @@ def on_window(self, event):
             VISTED_WINDOWS[current_workspace] = FOCUSED_WINDOW
             FOCUSED_WINDOW = current_window
     else:
-        VISTED_WINDOWS[current_workspace] = current_window
         FOCUSED_WINDOW = current_window
+        # visiting a workspace for the first time
+        if current_workspace not in VISTED_WINDOWS.keys():
+            VISTED_WINDOWS[current_workspace] = current_window
 
     # since we're in the same workspace, set this to False
     WORKSPACE_CHANGE = False
