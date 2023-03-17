@@ -1,0 +1,201 @@
+#!/usr/bin/python3
+
+import math
+import argparse
+import threading
+import os
+import yt_dlp
+
+
+class YoutubeDownload:
+    def __init__(
+        self, url, video_format, quality, playlist_start, playlist_end, max_downloads, path
+    ):
+        self.url = url
+        self.video_format = video_format
+        self.quality = quality
+        self.playlist_start = playlist_start
+        self.playlist_end = playlist_end
+        self.max_downloads = max_downloads
+        self.path = path
+
+    def __call__(self):
+        self.set_video_format_and_quality()
+        self.set_path()
+        self.download()
+
+    def set_video_format_and_quality(self):
+        if self.video_format == "mp4":
+            video = "mp4"
+            audio = "m4a"
+        elif self.video_format == "webm":
+            video = "webm"
+            audio = "webm"
+        if self.quality == "best":
+            self.opt_quality = f"bestvideo[ext={video}]+bestaudio[ext={audio}]/best[ext={video}]"
+        else:
+            self.opt_quality = f"bestvideo[height<={self.quality}][ext={video}]+bestaudio[ext={audio}]/best[ext={video}]"
+
+    def set_path(self):
+        if self.path:
+            if not os.path.exists(self.path):
+                raise FileNotFoundError(f"The path {self.path} does not exist.")
+            else:
+                os.chdir(self.path)
+
+    def download(self):
+        if "playlist" in self.url:
+            self.download_type = "playlist"
+            self.download_playlist()
+        elif "videos" in self.url[-6:]:
+            self.download_type = "channel"
+            self.download_playlist()
+        else:
+            self.download_type = "single"
+            options = self.make_options_for_single_video()
+            self.download_video(self.url, options)
+
+    def make_options_for_single_video(self, video_index=None):
+        if video_index:
+            padding = len(str(self.playlist_length))
+            options = {
+                "format": self.opt_quality,
+                "outtmpl": f"{video_index:0{padding}d}. %(title)s.%(ext)s",
+            }
+        else:
+            options = {"format": self.opt_quality, "outtmpl": "%(title)s.%(ext)s"}
+        return options
+
+    def get_playlist_length(self):
+        options = {
+            "playliststart": -1,
+            "playlistend": -1,
+        }
+        info_dict = self.extract_info_for_playlist_group(options)
+        self.playlist_length = info_dict["playlist_count"]
+
+    def download_playlist(self):
+        self.batch = 0
+        self.get_playlist_length()
+        if self.playlist_end == 0:
+            self.playlist_end = self.playlist_length
+        max_batch = math.ceil(
+            (self.playlist_end - self.playlist_start + 1) / self.max_downloads
+        )
+
+        # TODO: This is a temporary solution until I can figure out how to download
+        # the videos in a channel from the oldest to the newest
+        if self.download_type == "channel":
+            self.playlist_start, self.playlist_end, = self.playlist_length - self.playlist_end + 1, self.playlist_length - self.playlist_start + 1
+
+        while self.batch < max_batch:
+            options = self.make_options_for_playlist_group()
+            info_dict = self.extract_info_for_playlist_group(options)
+            self.batch += 1
+            threads = []
+            for entry in info_dict["entries"]:
+                video_url = entry["webpage_url"]
+                video_index = entry["playlist_index"]
+
+                if self.download_type == "channel":
+                    video_index = self.playlist_length - video_index + 1
+
+                video_options = self.make_options_for_single_video(video_index)
+                t = threading.Thread(
+                    target=self.download_video, args=[video_url, video_options]
+                )
+                t.start()
+            for t in threads:
+                t.join()
+
+    def make_options_for_playlist_group(self):
+        playlist_start = self.playlist_start + self.batch * self.max_downloads
+        playlist_end = playlist_start + self.max_downloads - 1
+
+
+        if playlist_end > self.playlist_end or playlist_end > self.playlist_length:
+            playlist_end = min(self.playlist_length, self.playlist_end)
+
+        options = {
+            "playliststart": playlist_start,
+            "playlistend": playlist_end,
+            'playlistreverse': True
+        }
+        return options
+
+    def extract_info_for_playlist_group(self, options):
+        with yt_dlp.YoutubeDL(options) as ydl:
+            ydl.extract_info
+            info_dict = ydl.extract_info(self.url, download=False)
+        return info_dict
+
+    def download_video(self, url, options):
+        with yt_dlp.YoutubeDL(options) as ydl:
+            ydl.download([url])
+
+
+def parse_argument():
+    parser = argparse.ArgumentParser(description="Download videos from YouTube.")
+
+    parser.add_argument(
+        "-u",
+        "--url",
+        required=True,
+        help="URL of the YouTube video or playlist to download",
+    )
+    parser.add_argument(
+        "-f",
+        "--format",
+        type=str,
+        default="mp4",
+        help="Format of the video {mp4, webm}: (default is mp4)",
+    )
+    parser.add_argument(
+        "-q",
+        "--quality",
+        default="best",
+        help="Quality of the video {360, 480, 720, 1080, best}: (default is best)",
+    )
+    parser.add_argument(
+        "-b",
+        "--playlist-start",
+        type=int,
+        default=1,
+        help="Playlist video to start at: (default is 1)",
+    )
+    parser.add_argument(
+        "-e",
+        "--playlist-end",
+        type=int,
+        default=0,
+        help="Playlist video to end at: (default is 0 for last)",
+    )
+    parser.add_argument(
+        "-n",
+        "--max-downloads",
+        type=int,
+        default=1,
+        help="Maximum number of videos to download at once: (default is 1)",
+    )
+    parser.add_argument(
+        "-p",
+        "--path",
+        type=str,
+        default="",
+        help="Download path: (default is current working directory)",
+    )
+
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_argument()
+    YoutubeDownload(
+        url=args.url,
+        video_format=args.format,
+        quality=args.quality,
+        playlist_start=args.playlist_start,
+        playlist_end=args.playlist_end,
+        max_downloads=args.max_downloads,
+        path=args.path,
+    )()
