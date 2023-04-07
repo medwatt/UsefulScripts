@@ -1,0 +1,82 @@
+#!/bin/bash
+
+# initialize variables
+APPIMAGE_FILE=""
+BIN_NAME=""
+BIN_PATH=""
+OUTPUT_DIR=""
+
+# parse command-line arguments
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+
+    case $key in
+        -a|--appimage)
+            APPIMAGE_FILE="$2"
+            shift # past argument
+            shift # past value
+            ;;
+        -n|--name)
+            BIN_NAME="$2"
+            shift # past argument
+            shift # past value
+            ;;
+        -p|--path)
+            BIN_PATH="$2"
+            shift # past argument
+            shift # past value
+            ;;
+        -o|--output)
+            OUTPUT_DIR="$2"
+            shift # past argument
+            shift # past value
+            ;;
+        *)    # unknown option
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# check if all required arguments have been provided
+if [ -z "$APPIMAGE_FILE" ] || [ -z "$BIN_NAME" ]; then
+    echo "Usage: appimage_extract -a <path_to_appimage> -n <appimage_bin_name> [-p <path_to_put_bin>] [-o <path_to_extract_appimage]"
+    exit 1
+fi
+
+# check if appimage file exists
+if [ ! -f "$APPIMAGE_FILE" ]; then
+    echo "AppImage file not found!"
+    exit 1
+fi
+
+# set default output directory to current working directory if user does not provide path
+if [ -z "$OUTPUT_DIR" ]; then
+    OUTPUT_DIR=$(pwd)
+fi
+
+# set link directory to ../appimages_bin if user does not provide one
+if [ -z "$BIN_PATH" ]; then
+    BIN_PATH="../appimages_bin"
+fi
+
+# create directory for extracted files
+mkdir -p "$OUTPUT_DIR"
+
+# extract appimage to output directory
+chmod +x "${APPIMAGE_FILE}"
+# cd "$OUTPUT_DIR" || exit
+echo "Extracting $APPIMAGE_FILE to $OUTPUT_DIR"
+./"$APPIMAGE_FILE" --appimage-extract
+
+# move extracted files out of squashfs-root folder
+mv squashfs-root/* .
+
+# clean up
+rm -rf squashfs-root
+
+# create links
+appimage_install "$BIN_NAME" "$BIN_PATH"
+
+echo "Done!"

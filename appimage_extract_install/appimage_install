@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# initialize variables
+BIN_NAME=""
+BIN_PATH=""
+
+# check if $BIN_NAME contains any spaces
+if echo "$1" | grep -q " "; then
+    echo "Error: Appname must not contain spaces"
+    exit 1
+else
+    BIN_NAME="$1"
+fi
+
+# set link directory to ../appimages_bin if user does not provide one
+if [ -z "$2" ]; then
+    BIN_PATH="../appimages_bin"
+else
+    BIN_PATH="$2"
+fi
+
+# check if $BIN_PATH directory exists in parent directory, and create it if it doesn't
+if [ ! -d "$BIN_PATH" ]; then
+    mkdir -p "$BIN_PATH"
+fi
+
+# search for file with .desktop extension in current working directory and below
+file=$(find "$(pwd)" -iname "*$BIN_NAME*.desktop" -print -quit)
+
+# check if file exists
+if [ -f "$file" ]; then
+    sed -i "s/^Exec=.*$/Exec=$BIN_NAME/g" "$file"
+    sed -i "s|^Icon=.*|Icon=$(realpath $(find . -maxdepth 1 \( -name '*.png' -o -name '*.svg' \)))|" "$file"
+    # sed -i "s|^Icon=.*|Icon=$(realpath ./*.png)|" "$file"
+    cp "$file" ~/.local/share/applications/
+    echo ".desktop file copied to ~/.local/share/applications/"
+else
+    echo "No .desktop file found"
+fi
+
+# create symlink for Apprun and make it executable
+ln -s "$(pwd)"/AppRun "$BIN_PATH"/"$BIN_NAME"
+chmod +x "$BIN_PATH"/"$BIN_NAME_NAME"
+
+echo "Done!"
