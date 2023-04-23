@@ -46,20 +46,23 @@ class I3Tiler:
     #                        manual-dynamic tiling                        #
     #######################################################################
 
+    def setup_new_workspace(self, workspace):
+        windows = [w for w in workspace.leaves() if w.window and w.floating != "user_on"]
+        self.windows_num = len(windows)
+
+        if self.windows_num == 1:
+            workspace.command("split h")
+
+        elif self.windows_num == 2:
+            for i, window in enumerate(windows):
+                if i == 1:
+                    window.command(f"resize set {int(workspace.rect.width * 0.4)} px")
+                window.command("split v")
+            self.num_columns = 2
+
     def on_window_new(self, i3, event):
-        if self.num_windows <= 2:
-            focused_window, workspace = self.get_focused()
-            windows = [w for w in workspace.leaves() if w.window and w.floating != "user_on"]
-            self.windows_num = len(windows)
-
-            if self.windows_num == 1:
-                workspace.command("split h")
-
-            elif self.windows_num == 2:
-                for i, window in enumerate(windows):
-                    if i == 1:
-                        window.command(f"resize set {int(workspace.rect.width * 0.4)} px")
-                    window.command("split v")
+        _, workspace = self.get_focused()
+        self.setup_new_workspace(workspace)
 
     def on_window_close(self, i3, event):
         focused_window, workspace = self.get_focused()
@@ -69,7 +72,7 @@ class I3Tiler:
         # Update he number of columns the workspace has when a window is removed
         if windows:
             self.num_columns = math.floor(
-                workspace.rect.width / windows[0].rect.width)
+                workspace.rect.width / focused_window.rect.width)
 
         # This logic here avoids having the situation where windows are stacked in rows
         # Note that this only works on windows close events
@@ -95,8 +98,14 @@ class I3Tiler:
             if event.container and event.container.layout == "splith":
                 if new_num_columns > self.num_columns:
                     event.container.command("splitv")
-
+                elif new_num_columns == 1:
+                    for container in workspace.descendants():
+                        if container.layout == "splitv":
+                            container.command("splith")
             self.num_columns = new_num_columns
+
+            workspace_moved_to = i3.get_tree().find_by_id(event.container.id).workspace()
+            self.setup_new_workspace(workspace_moved_to)
 
 if __name__ == "__main__":
     main = I3Tiler()
